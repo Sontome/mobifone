@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Tra cứu từ khóa</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 0; padding: 0; }
+    .navbar { background-color: #f1f1f1; padding: 10px 20px; display: flex; align-items: center; }
+    .navbar select, .navbar input { margin-right: 10px; padding: 6px; }
+    .content { padding: 20px; }
+    .match-block { border: 1px solid #ccc; margin-bottom: 20px; padding: 10px; border-radius: 6px; }
+    .row-label { font-weight: bold; margin-top: 10px; display: none; }
+    .expand-btn { cursor: pointer; color: blue; text-decoration: underline; margin: 4px 0; display: inline-block; }
+    table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+    td { border: 1px solid #ccc; padding: 5px; vertical-align: top; }
+  </style>
+</head>
+<body>
+  <div class="navbar">
+    <select id="sheetSelector">
+      <option value="">-- Chọn bảng --</option>
+    </select>
+    <input type="text" id="searchInput" placeholder="Nhập từ khóa..." style="width: 300px" />
+  </div>
+  <div class="content">
+    <div id="results"></div>
+  </div>
+
+  <script>
+    async function fetchSheets() {
+      const res = await fetch("/sheets");
+      const sheets = await res.json();
+      const selector = document.getElementById("sheetSelector");
+      sheets.forEach(s => {
+        const option = document.createElement("option");
+        option.value = s;
+        option.textContent = s;
+        selector.appendChild(option);
+      });
+    }
+
+    async function loadSheet(sheetName) {
+      const res = await fetch(`/sheet-data?sheet=${sheetName}`);
+      const { data } = await res.json();
+      const container = document.getElementById("results");
+      container.innerHTML = "";
+      data.forEach((row) => {
+        if (row.some(cell => cell !== "")) {
+          const block = document.createElement("div");
+          block.className = "match-block";
+          const table = document.createElement("table");
+          const tr = document.createElement("tr");
+          row.forEach((cell) => {
+            const td = document.createElement("td");
+            td.textContent = cell;
+            tr.appendChild(td);
+          });
+          table.appendChild(tr);
+          block.appendChild(table);
+          container.appendChild(block);
+        }
+      });
+    }
+
+    document.getElementById("sheetSelector").addEventListener("change", (e) => {
+      const sheet = e.target.value;
+      if (sheet) loadSheet(sheet);
+      else document.getElementById("results").innerHTML = "";
+    });
+
+    document.getElementById("searchInput").addEventListener("input", async function () {
+      const q = this.value.trim();
+      if (q.length < 3) return;
+      const res = await fetch(`/search?q=${encodeURIComponent(q)}`);
+      const matches = await res.json();
+      const container = document.getElementById("results");
+      container.innerHTML = "";
+      matches.forEach(item => {
+        const block = document.createElement("div");
+        block.className = "match-block";
+        const table = document.createElement("table");
+        const tr = document.createElement("tr");
+        item.columns.forEach(col => {
+          const td = document.createElement("td");
+          td.textContent = col.value;
+          tr.appendChild(td);
+        });
+        table.appendChild(tr);
+        block.appendChild(table);
+        for (const col in item.expandable) {
+          const btn = document.createElement("div");
+          btn.className = "expand-btn";
+          btn.innerText = `🔽 Xem thêm ở cột ${col}`;
+          btn.onclick = () => {
+            item.expandable[col].forEach(exp => {
+              const expTr = document.createElement("tr");
+              item.columns.forEach(base => {
+                const td = document.createElement("td");
+                const match = exp.columns.find(c => c.col === base.col);
+                td.textContent = match ? match.value : "";
+                expTr.appendChild(td);
+              });
+              table.appendChild(expTr);
+            });
+            btn.remove();
+          };
+          block.appendChild(btn);
+        }
+        container.appendChild(block);
+      });
+    });
+
+    fetchSheets();
+  </script>
+</body>
+</html>
